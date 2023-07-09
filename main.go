@@ -329,9 +329,10 @@ func (s *Server) fetchController() {
 			if len(requeue) > 0 {
 				go s.makeRequest(requeue[0])
 				requeue = requeue[1:]
-			} else {
-				go s.makeRequest(issuePos)
+				continue
 			}
+			go s.makeRequest(issuePos)
+
 			issuePos = (issuePos + 1) & ((1 << rangePrefixBits) - 1)
 			if issuePos == 0 && !s.initialFillDone {
 				s.initialFillDone = true
@@ -362,10 +363,9 @@ func (s *Server) fetchController() {
 			}
 			expBackoff.Reset()
 			completedSet[prefixToPos(res.prefix)] = true
-			delete(completedSet, s.updatePointer)
-			for i := s.updatePointer + 1; ; i++ {
+			for i := s.updatePointer; ; i++ {
 				if completedSet[i] {
-					s.updatePointer = i
+					s.updatePointer = i + 1
 					delete(completedSet, i)
 				} else {
 					break
