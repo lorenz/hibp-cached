@@ -34,14 +34,14 @@ around 3 hours.
 
 As soon as all ranges are cached locally, the `initial_fill_done` metric gauge
 goes to 1 and the `/ready` endpoint on port 8081 starts returning 200. At that
-point the request rate drops to `--refres-rps`, by default 0.4 (i.e. 1 request
+point the request rate drops to `--refresh-rps`, by default 0.4 (i.e. 1 request
 every 2.5s) which are used to check for updated ranges. The default setting
 achieves around 1 full refresh every month.
 
 The API is being served on port 8080.
 
 ## Monitoring
-A Prometheus/OpenMetrics compatible endpoint is available on port 8080 on path
+A Prometheus/OpenMetrics compatible endpoint is available on port 8081 on path
 `/metrics`. The following custom metrics are available:
 
 ### fetch_position
