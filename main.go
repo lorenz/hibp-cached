@@ -317,7 +317,6 @@ func (s *Server) fetchController() {
 				activeBackoff = false
 				qpsT.Reset(tickerDuration)
 			}
-			inFlightRequests++
 			// If the in-flight requests exceed the configured RPS,
 			// the average request takes more than 1s which is indicative
 			// of congestion. Add 1 to RPS to not break things at low
@@ -326,6 +325,7 @@ func (s *Server) fetchController() {
 				inFlightRequestBrake.Add(1)
 				continue
 			}
+			inFlightRequests++
 			if len(requeue) > 0 {
 				go s.makeRequest(requeue[0])
 				requeue = requeue[1:]
