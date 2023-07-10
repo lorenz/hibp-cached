@@ -526,7 +526,7 @@ func main() {
 			Timeout: 5 * time.Second,
 		},
 		upstreamURL:     upstreamURL,
-		updatePointer:   updatePtr,
+		updatePointer:   updatePtr & ((1 << rangePrefixBits) - 1),
 		initialFillDone: initialFillDone != nil,
 		res:             make(chan response, 128),
 	}
