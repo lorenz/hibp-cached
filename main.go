@@ -363,9 +363,9 @@ func (s *Server) fetchController() {
 			}
 			expBackoff.Reset()
 			completedSet[prefixToPos(res.prefix)] = true
-			for i := s.updatePointer; ; i++ {
+			for i := s.updatePointer; ; i = (i + 1) & ((1 << rangePrefixBits) - 1) {
 				if completedSet[i] {
-					s.updatePointer = i + 1
+					s.updatePointer = (i + 1) & ((1 << rangePrefixBits) - 1)
 					delete(completedSet, i)
 				} else {
 					break
