@@ -135,21 +135,21 @@ func UnmarshalRange(data []byte) (*Range, error) {
 func (r *Range) WriteTo(w http.ResponseWriter) (int64, error) {
 	w.Header().Set("last-modified", r.LastModified.Format(http.TimeFormat))
 	buf := make([]byte, len(r.Entries)*50)
-	bufPos := 0
+	bufPos := 1
 	occBuf := make([]byte, 0, 10)
 	for _, e := range r.Entries {
 		hex.EncodeUpper(buf[bufPos:], e.Hash[:])
-		buf[bufPos+35] = ':'
-		bufPos += 36
+		buf[bufPos] = '\n'
+		bufPos += 36 // 35 hex nibbles (expanded to one byte) plus newline
+		buf[bufPos] = ':'
+		bufPos++
 		occBuf = strconv.AppendUint(occBuf, e.Occurrences, 10)
 		bufPos += copy(buf[bufPos:], occBuf)
 		occBuf = occBuf[:0]
-		buf[bufPos] = '\n'
-		bufPos++
 	}
 	w.Header().Set("content-length", strconv.Itoa(bufPos-1))
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf[:bufPos-1])
+	w.Write(buf[1:])
 	return int64(bufPos) - 1, nil
 }
 
