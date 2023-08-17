@@ -149,7 +149,7 @@ func (r *Range) WriteTo(w http.ResponseWriter) (int64, error) {
 	}
 	w.Header().Set("content-length", strconv.Itoa(bufPos-1))
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf[1:])
+	w.Write(buf[1:bufPos])
 	return int64(bufPos) - 1, nil
 }
 
