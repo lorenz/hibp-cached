@@ -135,7 +135,7 @@ func UnmarshalRange(data []byte) (*Range, error) {
 func (r *Range) WriteTo(w http.ResponseWriter) (int64, error) {
 	w.Header().Set("last-modified", r.LastModified.Format(http.TimeFormat))
 	buf := make([]byte, len(r.Entries)*50)
-	bufPos := 1
+	bufPos := 0
 	occBuf := make([]byte, 0, 10)
 	for _, e := range r.Entries {
 		hex.EncodeUpper(buf[bufPos:], e.Hash[:])
@@ -146,6 +146,11 @@ func (r *Range) WriteTo(w http.ResponseWriter) (int64, error) {
 		occBuf = strconv.AppendUint(occBuf, e.Occurrences, 10)
 		bufPos += copy(buf[bufPos:], occBuf)
 		occBuf = occBuf[:0]
+	}
+	if bufPos == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("range not populated"))
+		return 0, nil
 	}
 	w.Header().Set("content-length", strconv.Itoa(bufPos-1))
 	w.WriteHeader(http.StatusOK)
