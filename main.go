@@ -25,6 +25,7 @@ import (
 
 var (
 	refreshRPS  = flag.Float64("refresh-rps", 0.4, "Number of requests per second to make to keep the cache up-to-date")
+	fastRPS     = flag.Float64("fast-rps", 12.0, "Number of requests per second to make when significant changes are observed")
 	fillRPS     = flag.Float64("fill-rps", 100.0, "Number of requests per seconds to make to fill the cache initially")
 	upstreamURL = flag.String("upstream-url", "https://api.pwnedpasswords.com/range", "Upstream URL the cache should pull from")
 )
@@ -294,24 +295,73 @@ var (
 	})
 )
 
+type mode int
+
+const (
+	modeFill    mode = 0
+	modeRefresh mode = 1
+	modeFast    mode = 2
+)
+
+func rpsFromMode(m mode) float64 {
+	switch m {
+	case modeFill:
+		return *fillRPS
+	case modeRefresh:
+		return *refreshRPS
+	case modeFast:
+		return *fastRPS
+	}
+	return 0.1
+}
+
+func tickerDurationFromMode(m mode) time.Duration {
+	return time.Duration(float64(time.Second) / rpsFromMode(m))
+}
+
+type resultStats struct {
+	ring []bool
+	pos  int
+}
+
+func newResultStats(n int) *resultStats {
+	return &resultStats{
+		ring: make([]bool, n),
+	}
+}
+
+func (r *resultStats) Add(v bool) {
+	r.ring[r.pos] = v
+	r.pos = (r.pos + 1) % len(r.ring)
+}
+
+func (r *resultStats) TrueRate() float64 {
+	var sum int
+	for _, b := range r.ring {
+		if b {
+			sum++
+		}
+	}
+	return float64(sum) / float64(len(r.ring))
+}
+
 func (s *Server) fetchController() {
 	issuePos := s.updatePointer
 	completedSet := make(map[uint32]bool)
-	updateIssueDuration := time.Duration(float64(time.Second) / *refreshRPS)
-	fillIssueDuration := time.Duration(float64(time.Second) / *fillRPS)
 	newRanges := make(map[[3]byte]Range)
 	checkpointT := time.NewTicker(30 * time.Second)
 	var requeue []uint32
 	var inFlightRequests int
-	var tickerDuration time.Duration = updateIssueDuration
+	m := modeRefresh
 	if !s.initialFillDone {
-		tickerDuration = fillIssueDuration
+		m = modeFill
 	}
 	var activeBackoff bool
 	var disableFetching bool
+	resultStat := newResultStats(25)
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 0
-	qpsT := time.NewTicker(tickerDuration)
+	qpsT := time.NewTicker(tickerDurationFromMode(m))
 	for {
 		select {
 		case <-qpsT.C:
@@ -320,13 +370,13 @@ func (s *Server) fetchController() {
 			}
 			if activeBackoff {
 				activeBackoff = false
-				qpsT.Reset(tickerDuration)
+				qpsT.Reset(tickerDurationFromMode(m))
 			}
 			// If the in-flight requests exceed the configured RPS,
 			// the average request takes more than 1s which is indicative
 			// of congestion. Add 1 to RPS to not break things at low
 			// RPS.
-			if inFlightRequests > int(*fillRPS)+1 {
+			if inFlightRequests > int(rpsFromMode(m))+1 {
 				inFlightRequestBrake.Add(1)
 				continue
 			}
@@ -342,8 +392,8 @@ func (s *Server) fetchController() {
 			if issuePos == 0 && !s.initialFillDone {
 				s.initialFillDone = true
 				initialFillDoneM.Set(1)
-				tickerDuration = updateIssueDuration
-				qpsT.Reset(tickerDuration)
+				m = modeRefresh
+				qpsT.Reset(tickerDurationFromMode(m))
 			}
 		case res := <-s.res:
 			inFlightRequests--
@@ -382,6 +432,19 @@ func (s *Server) fetchController() {
 				fetchRequestsOk.Add(1)
 			} else {
 				fetchRequestsNotModified.Add(1)
+			}
+
+			if m != modeFill {
+				resultStat.Add(res.r != nil)
+				lastM := m
+				if resultStat.TrueRate() > 0.5 {
+					m = modeFast
+				} else {
+					m = modeFill
+				}
+				if m != lastM {
+					qpsT.Reset(tickerDurationFromMode(m))
+				}
 			}
 		case <-checkpointT.C:
 			err := s.db.Update(func(tx *bbolt.Tx) error {
