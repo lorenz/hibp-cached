@@ -440,7 +440,7 @@ func (s *Server) fetchController() {
 				if resultStat.TrueRate() > 0.5 {
 					m = modeFast
 				} else {
-					m = modeFill
+					m = modeRefresh
 				}
 				if m != lastM {
 					qpsT.Reset(tickerDurationFromMode(m))
